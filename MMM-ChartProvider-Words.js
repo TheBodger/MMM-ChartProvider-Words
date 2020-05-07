@@ -32,11 +32,11 @@ var consumerpayloads = {};
 
 // when we get the start message we need to clear all tracking information as the consumer may resend a start message
 
-Module.register("MMM-ChartProvider-JSON", {
+Module.register("MMM-ChartProvider-Words", {
 
 	// Default module config.
 	defaults: {
-		text: "MMM-ChartProvider-JSON",
+		text: "MMM-ChartProvider-Words",
 		consumerids: ["MMFD1"], // the unique id of the consumer(s) to listen out for
 		id: "MMFP1", //the unique id of this provider, it can be set as a consumerid in a feed provider
 		datarefreshinterval: 1000 * 60 * 60,	//milliseconds to pause before checking for new data // common timer for all consumers
@@ -57,6 +57,7 @@ Module.register("MMM-ChartProvider-JSON", {
 				timestampformat: null,  // | No | a moment compatible timestamp format used to validate any dates found | timestamp string | Null - dont use any format
 				filename: null,         // | No | local file name(no paths) to save a serialised version of the extracted data as an array of items | any valid filename or not defined for no output.| none
 				oldestage: null,		//|No| ignored in this module at the moment|null|null
+				cleanhtml:true,			//|No| clean out html and other jumpf|true or false|true
 			},
 
 		],
@@ -149,8 +150,15 @@ Module.register("MMM-ChartProvider-JSON", {
 			//- be aware this is very very async and we might hit twisty nickers
 
 			if (this.config.input == "feedprovider") {
+
+				var feedDisplayPayload = { consumerid: '', providerid: '', payload: '' };
+				feedDisplayPayload.consumerid = this.config.id;
+				feedDisplayPayload.payload = "";
+				this.sendNotification('MMM-FeedDisplay_READY_FOR_ACTION', feedDisplayPayload);
+
 			}
 			else {
+
 				//initial request to get data
 				self.sendNotificationToNodeHelper("UPDATE", { moduleinstance: self.identifier, providerid: self.config.id });
 
@@ -165,6 +173,19 @@ Module.register("MMM-ChartProvider-JSON", {
 
 		}
 
+		if (notification == 'FEED_PROVIDER_DATA') {
+			//some one said they have data, it might be for me !
+
+			if (payload.consumerid == this.config.id) {
+
+				Log.log("Got some new data @ " );
+
+				//send the data to the node_helper to process the data
+
+				this.sendNotificationToNodeHelper("PROCESS_THIS", { providerid: self.config.id, moduleinstance: self.identifier, payload: payload });
+
+			}
+		}
 	},
 
 	sleep: function (milliseconds) {

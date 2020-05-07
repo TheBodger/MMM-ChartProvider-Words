@@ -9,14 +9,12 @@
 
 const moduleruntime = new Date();
 
-//this loads and formats JSON feeds into NDTF items, depending on its config when called to from the main module
-//to minimise activity, it will track what data has been already sent back to the module
-//and only send the delta each time, using the timestamp of the JSON data.
-
-//this is done by making a note of the last timestamp data of feeds sent to the module, tracked at the jsonfeed level
-//and ignoring anything older than that
-
-//as some feeds wont have a timestamp date, they will be allocated a pseudo timestamp date of the latest timestamp date in the current processed jsonfeeds
+//this loads and processes feeds into NDTF items of the count of words in the feeds, depending on its config when called to from the main module
+//
+//it must only send the same data once, 
+// if the input is a local file, once it has been sent it wont send it again
+// if the input is a web page (denoted by a HTTP prefix) then the returned data is only scraped once a day
+// if the input is a feed from a feedprovider, then we know we will be getting unique data each time, and so we can just  process it.
 
 //if the module calls a RESET, then the date tracking is reset and all data will be sent (TODO)
 
@@ -81,7 +79,6 @@ module.exports = NodeHelper.create({
 
 		if (this.debug) { this.logger[moduleinstance].info("In setconfig: " + moduleinstance + " " + config); }
 
-
 		if (config.input != null) {
 
 			config['useHTTP'] = false;
@@ -97,15 +94,17 @@ module.exports = NodeHelper.create({
 
 		var self = this;
 
-		//process the jsonfeed details into the local tracker
+		//process the wordfeed details into the local tracker
 
-		providerstorage[moduleinstance].config.jsonfeeds.forEach(function (configfeed) {
+		// TODO only process 1
+
+		providerstorage[moduleinstance].config.wordfeeds.forEach(function (configfeed) {
 
 			var feed = { sourcetitle: '', lastFeedDate: '', latestfeedpublisheddate: new Date(0), feedconfig: configfeed };
 
 			//we add some additional config information for usage in processing the data
 
-			//var jsonfeed = Object.assign({}, paramdefaults, config.params[idx]);
+			//var wordfeed = Object.assign({}, paramdefaults, config.params[idx]);
 
 			configfeed["useruntime"] = false;
 			configfeed["usenumericoutput"] = false;
@@ -113,10 +112,8 @@ module.exports = NodeHelper.create({
 			if (configfeed.type == 'numeric') { configfeed["usenumericoutput"] = true; }
 
 			if (typeof configfeed.timestamp == "number") { //wants an offset of the runtime, provided in seconds, or it was blank
-
 				configfeed["useruntime"] = true;
 				configfeed["runtime"] = new Date(moduleruntime.getTime() + (configfeed.timestamp * 1000));
-
 			}
 
 			//store the actual timestamp to start filtering, this will change as new feeds are pulled to the latest date of those feeds
@@ -165,15 +162,72 @@ module.exports = NodeHelper.create({
 			case "UPDATE":
 				//because we can get some of these in a browser refresh scenario, we check for the
 				//local storage before accepting the request
-
 				if (providerstorage[payload.moduleinstance] == null) { break; } //need to sort this out later !!
+				this.outputarray = new Array(1); //only 1 feed should be processed
 				this.processfeeds(payload.moduleinstance, payload.providerid);
+				break;
+			case "PROCESS_THIS":
+				this.outputarray = new Array(1); //only 1 feed should be processed
+				this.processincomingfeed(payload);
 				break;
 			case "STATUS":
 				this.showstatus(payload.moduleinstance);
 				break;
 		}
 
+	},
+
+	//we have received an RSS2.0 feed from somewhere so we need to process it into a single
+	//combined dataset and then pass it the processor as normal, bypassing the processfeeds.
+
+	processincomingfeed: function (payload) {
+
+		//moduleinstance: self.identifier, payload: payload
+
+		words = mergefeeds(payload.payload);
+
+		//as we only support one feed, then we can hard code on [0]
+		self.queue.addtoqueue(function () { self.processfeed(providerstorage[moduleinstance].trackingfeeddates[0], payload.moduleinstance, payload.providerid, 0, words); });
+
+		//and as we only have one input, then we have to start the queue to process this item
+		this.queue.startqueue(providerstorage[payload.moduleinstance].config.waitforqueuetime);
+    },
+
+
+	mergefeeds: function (feedproviderpayload) {
+
+		var tempwords = '';
+
+		feedproviderpayload.forEach(function (article) {
+
+			//we are interested in the title and the description only
+
+			tempwords = tempwords + " " + article.title + " " + article.description
+
+		})
+
+		return tempwords;
+	},
+
+	cleanString: function (theString) {
+		var self = this;
+		if (theString == null) { return theString };
+
+		var cTextClean = theString;
+		cTextClean = cTextClean.replace(/(?:https?|ftp):\/\/[\n\S]+/g, '');
+		cTextClean = cTextClean.replace(/[^\x00-\x7F]/g, '');
+		cTextClean = cTextClean.replace(/\n/g, ' ');
+		cTextClean = cTextClean.replace(/\s+/g, ' ');
+		cTextClean = cTextClean.trim();
+		if (cTextClean.endsWith(':'))
+			cTextClean = cTextClean.substr(0, cTextClean.length - 1);
+
+		//isprofanity(cTextClean, function (t,words) {
+		//	b = t ? 'contains' : 'does not contain';
+		//	self.logger[self.currentmoduleinstance].info("In cleanString : " + '"' + cTextClean + '" ' + b + ' profanity ' + JSON.stringify(words));
+		//}, 'node_modules/isprofanity/data/profanity.csv', 'node_modules/isprofanity/data/exceptions.csv', 0.8);
+
+		return cTextClean;
 	},
 
 	processfeeds: function (moduleinstance, providerid) {
@@ -183,43 +237,27 @@ module.exports = NodeHelper.create({
 
 		if (this.debug) { this.logger[moduleinstance].info("In processfeeds: " + moduleinstance + " " + providerid); }
 
-		//because we only get one data feed in the chart providers, then we preload the data before letting the jsonfeed actually process it
+		//because we only get one data feed in the chart providers, then we preload the data before letting the wordfeed actually process it
 
-		//we need to initialise the storage area within the providerstorage.
+		//attempt to pull anything back that is valid in terms of a fs or HTTP recognised locator
+		//we assume that we are getting a webpage or file of text (ignore it says JSON - it is just a web page pull)
 
-		this.outputarray = new Array(providerstorage[moduleinstance].config.jsonfeeds.length)// feeds and then items
-
-		for (var cidx = 0; cidx < providerstorage[moduleinstance].config.jsonfeeds.length; cidx++) {
-
-			this.outputarray[cidx] = [];
-		}
-
-		//attempt to pull anything back that is valid in terms of a fs ot HTTP recognised locator
-
-		var inputjson = JSONutils.getJSON(providerstorage[moduleinstance].config);
+		var inputtext = JSONutils.getJSON(providerstorage[moduleinstance].config);
 
 		providerstorage[moduleinstance].trackingfeeddates.forEach(function (feed) {
 
-			var jsonarray = utilities.getkeyedJSON(inputjson, feed.feedconfig.rootkey);
+			var words = inputtext;
 
 			//this should now be an array that we can process in the simplest case
 
 			//check it actually contains something, assuming if empty it is in error
 
-			if (jsonarray.length == 0) {
-				console.error("json array is empty");
+			if (words.length == 0) {
+				console.error("text is empty");
 				return;
 			}
 
-			if (self.debug) {
-				self.logger[moduleinstance].info("In process feed: " + JSON.stringify(feed));
-				self.logger[moduleinstance].info("In process feed: " + moduleinstance);
-				self.logger[moduleinstance].info("In process feed: " + providerid);
-				self.logger[moduleinstance].info("In process feed: " + feedidx);
-				self.logger[moduleinstance].info("building queue " + self.queue.queue.length);
-			}
-
-			self.queue.addtoqueue(function () { self.processfeed(feed, moduleinstance, providerid, ++feedidx, jsonarray); });
+			self.queue.addtoqueue(function () { self.processfeed(feed, moduleinstance, providerid, ++feedidx, words); });
 
 		});
 		//even though this is no longer asynchronous we keep the queue just for ease of development
@@ -287,23 +325,19 @@ module.exports = NodeHelper.create({
 	},
 
 	//now to the core of the system, where there are most different to the feedprovider modules
-	//we enter this for wach of the jsonfeeds we want to create to send back for later processing
+	//we enter this for each of the wordfeeds we want to create to send back for later processing
 
-	processfeed: function (feed, moduleinstance, providerid, feedidx, jsonarray) {
+	processfeed: function (feed, moduleinstance, providerid, feedidx, words) {
 
 		//we process a feed at a time here
 
-		if (this.debug) {
-			this.logger[moduleinstance].info("In fetch feed: " + JSON.stringify(feed));
-			this.logger[moduleinstance].info("In fetch feed: " + moduleinstance);
-			this.logger[moduleinstance].info("In fetch feed: " + providerid);
-			this.logger[moduleinstance].info("In fetch feed: " + feedidx);
-		}
-
-		//use these in the feedparser area
 		var sourcetitle = feed.sourcetitle;
 
+		// the output array will be used to store the new entries for each word count
+
 		var self = this;
+
+		//we still process the maxfeeddates but don't actually use them for anything at the moment
 
 		var maxfeeddate = new Date(0);
 			
@@ -311,109 +345,35 @@ module.exports = NodeHelper.create({
 			providerstorage[moduleinstance].trackingfeeddates[feedidx]['latestfeedpublisheddate'] = maxfeeddate;
 		}
 
-		for (var idx = 0; idx < jsonarray.length; idx++) {
+		if (this.config.cleanhtml){ var wordarray = this.cleanString(words.split(" ")); } else { var wordarray = words.split(" "); };
 
-			//look for any key value pairs required and create an item
-			//ignore any items that are older than the max feed date
+		var wordarray = words.split(" "); //TODO - need to do a better job (white space, delimiters) // probably a module to it
+		var wordlist = {};
 
-				var processthisitem = false;
+		for (var idx = 0; idx < wordarray.length; idx++) {
 
+			if (wordlist[wordarray[idx]] == null) {//need something to ignore useless words here
 				var tempitem = new structures.NDTFItem()
-
 				tempitem.object = feed.feedconfig.object;
+				tempitem.subject = wordarray[idx];  
+				tempitem.value = 0;
+				if (feed.feedconfig.useruntime) { tempitem.timestamp = feed.feedconfig.adjustedruntime; } //only option supported
+				self.maxfeeddate = new Date(Math.max(self.maxfeeddate, feed.feedconfig.adjustedruntime));
+				this.outputarray[feedidx].push(tempitem);
+				wordlist[wordarray[idx]] = 0;
+			}
 
-				//do we have a subject
-
-			if (jsonarray[idx][feed.feedconfig.subject] != null) {
-
-				tempitem.subject = jsonarray[idx][feed.feedconfig.subject];
-
-					//do we have a value
-
-				if (jsonarray[idx][feed.feedconfig.value] != null) {
-
-						//check if numeric 
-
-					if (feed.feedconfig.usenumericoutput) {
-						if (isNaN(parseFloat(jsonarray[idx][feed.feedconfig.value]))) {
-							console.error("Invalid numeric value: " + jsonarray[idx][feed.feedconfig.value]);
-							}
-							else {
-								tempitem.value = parseFloat(jsonarray[idx][feed.feedconfig.value]);
-							}
-						}
-						else {
-							tempitem.value = jsonarray[idx][feed.feedconfig.value];
-						}
-
-						//if the timestamp is requested do we have one of those as well
-
-					if (!feed.feedconfig.useruntime) {
-
-						//got a timestamp key, now validate it
-
-						var temptimestamp = jsonarray[idx][feed.feedconfig.timestamp];
-
-						if (temptimestamp != null) {
-
-							self.maxfeeddate = new Date(Math.max(self.maxfeeddate, new Date(temptimestamp)));
-
-							if (new Date(temptimestamp) > feed.latestfeedpublisheddate) {
-
-								if (feed.feedconfig.timestampformat != null) {
-
-									if (moment(temptimestamp, feed.feedconfig.timestampformat).isValid()) {
-
-										//got a good date
-
-										tempitem.timestamp = moment(temptimestamp, feed.feedconfig.timestampformat).toDate();
-
-										processthisitem = true;
-
-									}
-									else { console.error("Invalid date"); }
-
-								}
-
-								else {
-
-									if (moment(temptimestamp).isValid()) {
-
-										//got a good date
-
-										tempitem.timestamp = moment(temptimestamp).toDate();
-
-										processthisitem = true;
-
-									}
-									else { console.error("Invalid date"); }
-
-								}
-							}
-							}
-						}
-						else { // use an offset timestamp
-
-							tempitem.timestamp = feed.feedconfig.adjustedruntime;
-
-							processthisitem = true;
-
-						}
-
-					}
-
-				}
-
-				if (processthisitem) {
-
-
-					this.outputarray[feedidx].push(tempitem);
-
-				}
-
-				delete tempitem;
+			wordlist[wordarray[idx]] = wordlist[wordarray[idx]] + 1; 
 
 		}  //end of process loop - input array
+
+		//now finish building the outputarray
+
+		for (var widx = 0; widx < outputarray.length; widx++) {
+
+			outputarray[widx].value = wordlist[outputarray[widx].subject];
+
+        }
 
 		if (feed.feedconfig.filename == null) {
 			console.info(this.outputarray[feedidx].length);
