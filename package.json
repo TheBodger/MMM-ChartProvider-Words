@@ -1,0 +1,31 @@
+{
+  "name": "MMM-ChartProvider-Words",
+  "version": "1.0.0",
+  "description": "Magic Mirror Module for pulling feeds or files, extracting word counts, converting to NDTF format and passing to a main module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheBodger/MMM-ChartProvider-Words"
+  },
+  "author": {
+    "name": "N Scott"
+  },
+  "keywords": [
+    "magic mirror",
+    "smart mirror",
+    "Word counts Feeds",
+    "module",
+    "provider"
+  ],
+  "dependencies": {
+    "axios": "latest",
+    "winston": "latest",
+    "moment": "latest",
+    "request": "latest",
+    "fs": "latest"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/TheBodger/MMM-ChartProvider-Words/issues"
+  },
+  "homepage": "https://github.com/TheBodger/MMM-ChartProvider-Words#readme"
+}
