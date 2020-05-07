@@ -8,6 +8,7 @@
  */
 
 var startTime = new Date();
+var moduleruntime = startTime;
 
 var feedDisplayPayload = { consumerid: '', providerid: '', payload: '' };
 
@@ -57,7 +58,7 @@ Module.register("MMM-ChartProvider-Words", {
 				timestampformat: null,  // | No | a moment compatible timestamp format used to validate any dates found | timestamp string | Null - dont use any format
 				filename: null,         // | No | local file name(no paths) to save a serialised version of the extracted data as an array of items | any valid filename or not defined for no output.| none
 				oldestage: null,		//|No| ignored in this module at the moment|null|null
-				cleanhtml:true,			//|No| clean out html and other jumpf|true or false|true
+				cleanhtml:true,			//|No| clean out html and other gumpf|true or false|true
 			},
 
 		],
@@ -81,6 +82,14 @@ Module.register("MMM-ChartProvider-Words", {
 		this.config = Object.assign({}, this.defaults, config);
 		for (var jidx = 0; jidx < config.wordfeeds.length; jidx++) {
 			this.config.wordfeeds[jidx] = Object.assign({}, this.defaults.wordfeeds[0], config.wordfeeds[jidx]);
+			this.config.wordfeeds[jidx]["useruntime"] = false;
+			if (typeof this.config.wordfeeds[jidx].timestamp == "number") { //wants an offset of the runtime, provided in seconds, or it was blank
+
+				this.config.wordfeeds[jidx]["useruntime"] = true;
+				this.config.wordfeeds[jidx]["adjustedruntime"] = new Date(moduleruntime.getTime() + (this.config.wordfeeds[jidx].timestamp * 1000));
+
+			}
+
 		}
 
 	},
@@ -110,6 +119,8 @@ Module.register("MMM-ChartProvider-Words", {
 
 	notificationReceived: function (notification, payload, sender) {
 
+		var self = this;
+
 		if (sender) {
 			Log.log(this.name + " received a module notification: " + notification + " from sender: " + sender.name);
 		} else {
@@ -121,8 +132,6 @@ Module.register("MMM-ChartProvider-Words", {
 		//when we get multiple consumers to look after
 
 		if ((notification == 'MMM-ChartDisplay_READY_FOR_ACTION' || notification == 'MMM-ChartDisplay_SEND_MORE_DATA') && this.myconsumer(payload.consumerid)) {
-
-			var self = this
 
 			//clear all the tracking data for this consumer
 
@@ -182,7 +191,7 @@ Module.register("MMM-ChartProvider-Words", {
 
 				//send the data to the node_helper to process the data
 
-				this.sendNotificationToNodeHelper("PROCESS_THIS", { providerid: self.config.id, moduleinstance: self.identifier, payload: payload });
+				self.sendNotificationToNodeHelper("PROCESS_THIS", { providerid: self.config.id, moduleinstance: self.identifier, payload: payload });
 
 			}
 		}

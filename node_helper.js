@@ -8,6 +8,7 @@
  */
 
 const moduleruntime = new Date();
+const stopwords = ["", "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "arent", "as", "at", "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", "cant", "cannot", "could", "couldnt", "did", "didnt", "do", "does", "doesnt", "doing", "dont", "down", "during", "each", "few", "for", "from", "further", "had", "hadnt", "has", "hasnt", "have", "havent", "having", "he", "hed", "hell", "hes", "her", "here", "heres", "hers", "herself", "him", "himself", "his", "how", "hows", "i", "id", "ill", "im", "ive", "if", "in", "into", "is", "isnt", "it", "its", "its", "itself", "lets", "me", "more", "most", "mustnt", "my", "myself", "no", "nor", "not", "of", "off", "on", "once", "only", "or", "other", "ought", "our", "ours", "ourselves", "out", "over", "own", "same", "shant", "she", "shed", "shell", "shes", "should", "shouldnt", "so", "some", "such", "than", "that", "thats", "the", "their", "theirs", "them", "themselves", "then", "there", "theres", "these", "they", "theyd", "theyll", "theyre", "theyve", "this", "those", "through", "to", "too", "under", "until", "up", "very", "was", "wasnt", "we", "wed", "well", "were", "weve", "were", "werent", "what", "whats", "when", "whens", "where", "wheres", "which", "while", "who", "whos", "whom", "why", "whys", "with", "wont", "would", "wouldnt", "you", "youd", "youll", "youre", "youve", "your", "yours", "yourself", "yourselves"];
 
 //this loads and processes feeds into NDTF items of the count of words in the feeds, depending on its config when called to from the main module
 //
@@ -119,7 +120,7 @@ module.exports = NodeHelper.create({
 			//store the actual timestamp to start filtering, this will change as new feeds are pulled to the latest date of those feeds
 			//if no date is available on a feed, then the current latest date of a feed published is allocated to it
 
-			feed.lastFeedDate = commonutils.calcTimestamp(configfeed.oldestage);
+			//feed.lastFeedDate = commonutils.calcTimestamp(configfeed.oldestage);  //ignored in this module until we add date processing of historicaldata
 			feed.sourcetitle = configfeed.feedtitle;
 			feed.feedconfig = configfeed;
 
@@ -164,10 +165,12 @@ module.exports = NodeHelper.create({
 				//local storage before accepting the request
 				if (providerstorage[payload.moduleinstance] == null) { break; } //need to sort this out later !!
 				this.outputarray = new Array(1); //only 1 feed should be processed
+				this.outputarray[0] = [];
 				this.processfeeds(payload.moduleinstance, payload.providerid);
 				break;
 			case "PROCESS_THIS":
 				this.outputarray = new Array(1); //only 1 feed should be processed
+				this.outputarray[0] = [];
 				this.processincomingfeed(payload);
 				break;
 			case "STATUS":
@@ -182,15 +185,17 @@ module.exports = NodeHelper.create({
 
 	processincomingfeed: function (payload) {
 
+		var self = this;
+
 		//moduleinstance: self.identifier, payload: payload
 
-		words = mergefeeds(payload.payload);
+		words = this.mergefeeds(payload.payload.payload);
 
 		//as we only support one feed, then we can hard code on [0]
-		self.queue.addtoqueue(function () { self.processfeed(providerstorage[moduleinstance].trackingfeeddates[0], payload.moduleinstance, payload.providerid, 0, words); });
+		self.queue.addtoqueue(function () { self.processfeed(providerstorage[payload.moduleinstance].trackingfeeddates[0], payload.moduleinstance, payload.providerid, 0, words); });
 
 		//and as we only have one input, then we have to start the queue to process this item
-		this.queue.startqueue(providerstorage[payload.moduleinstance].config.waitforqueuetime);
+		self.queue.startqueue(providerstorage[payload.moduleinstance].config.waitforqueuetime);
     },
 
 
@@ -214,10 +219,14 @@ module.exports = NodeHelper.create({
 		if (theString == null) { return theString };
 
 		var cTextClean = theString;
+		cTextClean = cTextClean.replace(/<head>[\s\S]*?<\/head>/ig, ""); //loose the head section
+		cTextClean = cTextClean.replace(/(<([^>]+)>)/ig, ""); // loose all the tags and contents
 		cTextClean = cTextClean.replace(/(?:https?|ftp):\/\/[\n\S]+/g, '');
 		cTextClean = cTextClean.replace(/[^\x00-\x7F]/g, '');
 		cTextClean = cTextClean.replace(/\n/g, ' ');
 		cTextClean = cTextClean.replace(/\s+/g, ' ');
+		cTextClean = cTextClean.replace(/[^A-Za-z0-9_]/g, ' '); //remove all the delimiters
+		cTextClean = cTextClean.replace(/[^A-Za-z0-9_]/g, ' '); //remove all the numbers
 		cTextClean = cTextClean.trim();
 		if (cTextClean.endsWith(':'))
 			cTextClean = cTextClean.substr(0, cTextClean.length - 1);
@@ -242,7 +251,7 @@ module.exports = NodeHelper.create({
 		//attempt to pull anything back that is valid in terms of a fs or HTTP recognised locator
 		//we assume that we are getting a webpage or file of text (ignore it says JSON - it is just a web page pull)
 
-		var inputtext = JSONutils.getJSON(providerstorage[moduleinstance].config);
+		var inputtext = JSONutils.getTEXT(providerstorage[moduleinstance].config);
 
 		providerstorage[moduleinstance].trackingfeeddates.forEach(function (feed) {
 
@@ -298,19 +307,21 @@ module.exports = NodeHelper.create({
 
 	send: function (moduleinstance, providerid, source, feedidx) {
 
+		var self = this;
+
 		//wrap the output array in an object so the main module handles it in the same way as if it was a collection of feeds
 		//and add an id for tracking purposes and wrap that in an array
 
 		var payloadforprovider = {
-			providerid: providerid, source: source, payloadformodule: [{ setid: providerstorage[moduleinstance].trackingfeeddates[feedidx].feedconfig.setid, itemarray: this.outputarray[feedidx] }]
+			providerid: providerid, source: source, payloadformodule: [{ setid: providerstorage[moduleinstance].trackingfeeddates[feedidx].feedconfig.setid, itemarray: self.outputarray[feedidx] }]
 		};
 
 		if (this.debug) {
-			this.logger[moduleinstance].info("In send, source, feeds // sending items this time: " + (this.outputarray[feedidx].length > 0));
+			this.logger[moduleinstance].info("In send, source, feeds // sending items this time: " + (self.outputarray[feedidx].length > 0));
 			this.logger[moduleinstance].info(JSON.stringify(source));
 		}
 
-		if (this.outputarray[feedidx].length > 0) {
+		if (self.outputarray[feedidx].length > 0) {
 
 			this.sendNotificationToMasterModule("UPDATED_STUFF_" + moduleinstance, payloadforprovider);
 
@@ -318,7 +329,7 @@ module.exports = NodeHelper.create({
 
 		// as we have sent it and the important date is stored we can clear the outputarray
 
-		this.outputarray[feedidx] = [];
+		self.outputarray[feedidx] = [];
 
 		this.queue.processended();
 
@@ -339,52 +350,56 @@ module.exports = NodeHelper.create({
 
 		//we still process the maxfeeddates but don't actually use them for anything at the moment
 
-		var maxfeeddate = new Date(0);
+		this.maxfeeddate = new Date(0);
 			
-		if (new Date(0) < maxfeeddate) {
-			providerstorage[moduleinstance].trackingfeeddates[feedidx]['latestfeedpublisheddate'] = maxfeeddate;
+		if (new Date(0) < this.maxfeeddate) {
+			providerstorage[moduleinstance].trackingfeeddates[feedidx]['latestfeedpublisheddate'] = this.maxfeeddate;
 		}
 
-		if (this.config.cleanhtml){ var wordarray = this.cleanString(words.split(" ")); } else { var wordarray = words.split(" "); };
+		if (feed.feedconfig.cleanhtml){ var wordarray = this.cleanString(words).split(" "); } else { var wordarray = words.split(" "); };
 
-		var wordarray = words.split(" "); //TODO - need to do a better job (white space, delimiters) // probably a module to it
 		var wordlist = {};
 
 		for (var idx = 0; idx < wordarray.length; idx++) {
 
-			if (wordlist[wordarray[idx]] == null) {//need something to ignore useless words here
-				var tempitem = new structures.NDTFItem()
-				tempitem.object = feed.feedconfig.object;
-				tempitem.subject = wordarray[idx];  
-				tempitem.value = 0;
-				if (feed.feedconfig.useruntime) { tempitem.timestamp = feed.feedconfig.adjustedruntime; } //only option supported
-				self.maxfeeddate = new Date(Math.max(self.maxfeeddate, feed.feedconfig.adjustedruntime));
-				this.outputarray[feedidx].push(tempitem);
-				wordlist[wordarray[idx]] = 0;
-			}
+			var thisword = wordarray[idx].toLowerCase();
 
-			wordlist[wordarray[idx]] = wordlist[wordarray[idx]] + 1; 
+			if (stopwords.indexOf(thisword) == -1 && thisword.length>2 && isNaN(parseInt(thisword))) {
+
+				if (wordlist[thisword] == null) {//need something to ignore useless words here
+					var tempitem = new structures.NDTFItem()
+					tempitem.object = feed.feedconfig.object;
+					tempitem.subject = thisword;
+					tempitem.value = 0;
+					if (feed.feedconfig.useruntime) { tempitem.timestamp = feed.feedconfig.adjustedruntime; } //only option supported
+					self.maxfeeddate = new Date(Math.max(self.maxfeeddate, feed.feedconfig.adjustedruntime));
+					self.outputarray[feedidx].push(tempitem);
+					wordlist[thisword] = 0;
+				}
+
+				wordlist[thisword] = wordlist[thisword] + 1;
+			}
 
 		}  //end of process loop - input array
 
 		//now finish building the outputarray
 
-		for (var widx = 0; widx < outputarray.length; widx++) {
+		for (var widx = 0; widx < self.outputarray[feedidx].length; widx++) {
 
-			outputarray[widx].value = wordlist[outputarray[widx].subject];
+			self.outputarray[feedidx][widx].value = wordlist[self.outputarray[feedidx][widx].subject];
 
         }
 
 		if (feed.feedconfig.filename == null) {
-			console.info(this.outputarray[feedidx].length);
+			console.info(self.outputarray[feedidx].length);
 		}
 		else {
 
 			// write out to a file
 
-			JSONutils.putJSON("./" + feed.feedconfig.filename, this.outputarray[feedidx]);
+			JSONutils.putJSON("./" + feed.feedconfig.filename, self.outputarray[feedidx]);
 
-			console.info(this.outputarray[feedidx].length);
+			console.info(self.outputarray[feedidx].length);
 
 		}
 
