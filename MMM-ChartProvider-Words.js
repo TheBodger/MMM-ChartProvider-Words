@@ -50,9 +50,9 @@ Module.register("MMM-ChartProvider-Words", {
 				feedname: null,
 				setid: null,			// | Yes | the setid of this particular data, used to identify the data when received in display module
 				rootkey: '',            // | No | the key value to determine at what level to extract data | a valid string | the first level
-				subject: null,          // | Yes | the KEY name to use as a subject for an item | any valid string | the word counted
-				object: null,           // | Yes | the object to insert into the item | any valid string | "wordcount"
-				value: null,            // | Yes | the KEY name to use to for the value field of the item | any valid string | the count of the word
+				subject: null,          // | Np | the KEY name to use as a subject for an item | any valid string | the word counted
+				object: null,           // | No | the object to insert into the item | any valid string | "wordcount"
+				value: null,            // | No | the KEY name to use to for the value field of the item | any valid string | the count of the word
 				type: "numeric",         // | No | the type of the value when added to the output item | numeric or string | numeric
 				timestamp: 0,           // | No | the KEY name of a timestamp to use for the timestamp field value in the item, or an offset from the runtime of the module as a number | any valid string(timestamp uses loose moment to validate) Or a negative or positive integer of seconds to offset from the tun time | the timestamp of running the module (i.e. use offset of 0)
 				timestampformat: null,  // | No | a moment compatible timestamp format used to validate any dates found | timestamp string | Null - dont use any format

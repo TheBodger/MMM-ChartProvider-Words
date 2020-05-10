@@ -1,17 +1,97 @@
 # MMM-ChartProvider-Words
-A magic mirror module that counts words in feeds sends to Chartdisplay
 
-Like all chart providers, this one will create a standard output feed in NDTF containing information about the counts of words by word from its input.
+This magic mirror module is a MMM-ChartProvider module that is part of the MMM-Chartxxx and MMM-Feedxxx interrelated modules.
 
-input can be a url, where the html returned will be processed, a local file, ditto processing or output from a feed provider.
+For an overview of these modules see the README.md in https://github.com/TheBodger/MMM-ChartDisplay.
 
-if the input is the output from a feed provider, the config for this module will include an id, and the feedprovider's config will  contain a matching consumerid to this modules id.
+the -Words module reads text data, from a URL, local text file or from a MMM-FeedProvider. It counts the words after applying a list of stop words and then the rules in the config and formats it into a single NDTF standard feeds for one or more MMM-ChartDisplay consumers.
 
-TODO During word counting, all HTML tags can be removed
+As this module can be a consumer of another provider module, the module id in the config needs to match exactly the id in the feed providers consumerids list.
 
-the output will be {subject:"the word",object;"countofoword",value:the actual countof words;timestamp:probably use the runtime but this could be a historical date allowing for analysis of word counts over time.}
+The NDTF feed created has the following information:
 
-only one input is allowed per chartprovider, and there will only be one feed used
+{subject:"the word",
+object;"countofoword",
+value:the actual count of the word;
+timestamp:use the runtime (TODO: this could be a historical date allowing for analysis of word counts over time.}
 
-the code is based on chartprovider-json, with additional code taken from feeddisplay to handle an incoming RSS2.0 feed, this way the words can be provided from one or more feedproviders (i.e. twitter and instagram)
+### Example
+![Example of MMM-ChartProvider-Words output being displayed](images/screenshot.png?raw=true "Example screenshot")
 
+### Dependencies
+
+This module requires both MMM-FeedUtilities and MMM-ChartUtilies to be installed.
+
+Before installing this module;
+		use https://github.com/TheBodger/MMM-ChartUtilities to setup the MMM-Chart... dependencies and  install all modules.
+		use https://github.com/TheBodger/MMM-FeedUtilities to setup the MMM-Feed... dependencies and  install all modules.
+
+## Installation
+To install the module, use your terminal to:
+1. Navigate to your MagicMirror's modules folder. If you are using the default installation directory, use the command:<br />`cd ~/MagicMirror/modules`
+2. Clone the module:<br />`git clone https://github.com/TheBodger/MMM-ChartProvider-Words`
+
+## Using the module
+
+### MagicMirror² Configuration
+
+To use this module, add the following minimum configuration block to the modules array in the `config/config.js` file:
+```js
+{
+    input: "filename containsing text or URL or 'feedprovider'",
+    wordfeeds: 
+    {
+	    setid: 'a unique identifier of this set'
+    }
+  
+}
+
+```
+
+### Configuration Options
+
+| Option                  | Details
+|------------------------ |--------------
+| `text`                | *Optional* - <br><br> **Possible values:** Any string.<br> **Default value:** The Module name
+| `consumerids`            | *Required* - a list of 1 or more consumer modules this module will provide for.<br><br> **Possible values:** An array of strings exactly matching the ID of one or more MMM-ChartDisplay modules <br> **Default value:** none
+| `id`         | *Required* - The unique ID of this provider module<br><br> **Possible values:** any unique string<br> **Default value:** none
+| `datarefreshinterval`            | *Optional* - milliseconds to pause before checking for new data in the feeds.<br><br> **Possible values:** a number in milliseconds <br> **Default value:** `60000` 
+| `input`            | *Required* - the local filename with file path relative to the Magicmirror folder or the URL of the text feed or the string 'feedprovider'<br><br> **Possible values:** any valid file and path or URL <br> **Default value:** none
+| `wordfeeds`        | *Required* - A single feed definitions, see below for the wordfeed configuration options 
+| `waitforqueuetime`            |*Ignore* -  Queue delay between ending one queue item and starting the next <br><br> **Possible values:** a number in milliseconds. <br> **Default value:** `10`
+| `wordfeed Format`            |
+| `feedname`            |*Optional* -  Name of the feed for reference purposes<br><br> **Possible values:** Any unique string. <br> **Default value:** none
+| `setid`            |*Required* - The unique identifier of this set of data produced by this definition. It will be used in the MMM-ChartDisplay configuration to uniquely identify this set.<br><br> **Possible values:** Any unique string. <br> **Default value:** none
+| `oldestage`            |*Optional* -  Currently unused. <br><br> **Possible values:** 'today' or a number of minutes or a valid date(See [Moment.js formats](http://momentjs.com/docs/#/parsing/string-format/). <br> **Default value:** none
+| `filename`            |*Optional* - The filename, with path, where the output feed will be written in a JSON format<br><br> **Possible values:** Any valid filename and path string <br> **Default value:** none
+| `cleanhtml`,			|*Optional* -  will apply cleaning rules to remove as much none relevant information from the text feed, such as html tags, urls etc.. <br><br> **Possible values:** true or false.<br> **Default value:** true
+
+### Example configuration
+
+this configuration produces a single feed from a feedprovider provided standard feed, 
+
+```
+{
+	module: "MMM-ChartProvider-Words",
+	config: {
+		id: "MMCP3",
+		consumerids: ["MMCD3",],
+		datarefreshinterval: 1000 * 60 * 60 * 24, 
+		input: 'feedprovider',
+		wordfeeds: [
+			{
+				feedname: "twords",
+				setid: "TJXWords",
+				type: "numeric",
+			}
+		]
+	}
+},
+
+```
+
+### Additional Notes
+
+This is a WIP; changes are being made all the time to improve the compatibility across the modules. Please refresh this and the MMM-feedUtilities and MMM-ChartUtilities modules with a `git pull` in the relevant modules folders.
+
+This module is primarily designed for use in the amchart word clouds example charts.

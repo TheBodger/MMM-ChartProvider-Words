@@ -171,6 +171,7 @@ module.exports = NodeHelper.create({
 			case "PROCESS_THIS":
 				this.outputarray = new Array(1); //only 1 feed should be processed
 				this.outputarray[0] = [];
+				//this.logger[payload.moduleinstance].info(JSON.stringify(payload));
 				this.processincomingfeed(payload);
 				break;
 			case "STATUS":
