@@ -10,10 +10,12 @@ As this module can be a consumer of another provider module, the module id in th
 
 The NDTF feed created has the following information:
 
+<pre>
 {subject:"the word",
 object;"countofoword",
 value:the actual count of the word;
 timestamp:use the runtime (TODO: this could be a historical date allowing for analysis of word counts over time.}
+</pre>
 
 ### Example
 ![Example of MMM-ChartProvider-Words output being displayed](images/screenshot.png?raw=true "Example screenshot")
