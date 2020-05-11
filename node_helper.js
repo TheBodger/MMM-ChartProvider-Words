@@ -28,7 +28,7 @@ var moment = require("moment");
 var LOG = require('../MMM-FeedUtilities/LOG');
 var QUEUE = require('../MMM-FeedUtilities/queueidea');
 var RSS = require('../MMM-FeedUtilities/RSS');
-var commonutils = require('../MMM-FeedUtilities/utilities');
+var UTILITIES = require('../MMM-FeedUtilities/utilities');
 
 // get required structures and utilities
 
