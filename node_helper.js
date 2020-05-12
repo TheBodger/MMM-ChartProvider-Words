@@ -231,27 +231,46 @@ module.exports = NodeHelper.create({
 		//attempt to pull anything back that is valid in terms of a fs or HTTP recognised locator
 		//we assume that we are getting a webpage or file of text (ignore it says JSON - it is just a web page pull)
 
-		var inputtext = JSONutils.getTEXT(providerstorage[moduleinstance].config);
+		//using version 2.0 of the utils that use callbacks for all cases to process the data captured
 
-		providerstorage[moduleinstance].trackingfeeddates.forEach(function (feed) {
+		var options = {};
 
-			var words = inputtext;
+		if (providerstorage[moduleinstance].config.useHTTP) {
+			var options = new URL(providerstorage[moduleinstance].config.input);
+		}
 
-			//this should now be an array that we can process in the simplest case
+		var JSONconfig = {
+			options: options,
+			config: providerstorage[moduleinstance].config,
+			feed: {},
+			moduleinstance: moduleinstance,
+			providerid: providerid,
+			feedidx: feedidx,
+		};
 
-			//check it actually contains something, assuming if empty it is in error
+		JSONconfig['callback'] = function (JSONconfig, inputtext) {
 
-			if (words.length == 0) {
-				console.error("text is empty");
-				return;
-			}
+			providerstorage[JSONconfig.moduleinstance].trackingfeeddates.forEach(function (feed) {
 
-			self.queue.addtoqueue(function () { self.processfeed(feed, moduleinstance, providerid, ++feedidx, words); });
+				var words = inputtext;
 
-		});
-		//even though this is no longer asynchronous we keep the queue just for ease of development
+				//this should now be an array that we can process in the simplest case
 
-		this.queue.startqueue(providerstorage[moduleinstance].config.waitforqueuetime);
+				//check it actually contains something, assuming if empty it is in error
+
+				if (words.length == 0) {
+					console.error("text is empty");
+					return;
+				}
+
+				self.queue.addtoqueue(function () { self.processfeed(feed, JSONconfig.moduleinstance, JSONconfig.providerid, ++JSONconfig.feedidx, words); });
+
+				self.queue.startqueue(providerstorage[JSONconfig.moduleinstance].config.waitforqueuetime); //the start function ignores a start once started
+
+			});
+		}
+
+		JSONutils.getTEXTnew(JSONconfig);
 		
 	},
 
